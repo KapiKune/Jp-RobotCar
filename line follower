@@ -1,0 +1,113 @@
+from infrared import Infrared
+from motor import Ordinary_Car
+from ultrasonic import Ultrasonic
+from servo import Servo
+import time
+
+drive = Ordinary_Car()
+infrared = Infrared()
+dist_sensor = Ultrasonic()
+servo = Servo()
+
+obstacle_away = 10  # distance in cm to detect
+scan_angles = range(0, 181, 10)  # scan angles from 0 to 180 in steps of 10
+
+def TurnLeft():
+    drive.set_motor_model(-700, -700, 700, 700)
+
+def TurnRight():
+    drive.set_motor_model(700, 700, -700, -700)  
+def bigLeft():
+    drive.set_motor_model(0, 0, 700, 700)
+
+def bigRight():
+    drive.set_motor_model(700, 700, 0, 0)  
+
+def Forward():
+    drive.set_motor_model(-700, -700, -700, -700)
+
+def Stop():
+    drive.set_motor_model(0, 0, 0, 0)
+
+def Backward():
+    drive.set_motor_model(700, 700, 700, 700)
+
+def scan_for_obstacles():
+    obstacle_directions = []
+    for angle in scan_angles:
+        servo.set_servo_pwm("0", angle)
+        dist = dist_sensor.get_distance()
+        print(f"Angle {angle}: Distance {dist} cm")
+        
+        if dist <= obstacle_away:
+            obstacle_directions.append(angle)
+        
+        time.sleep(0.1)  
+    return obstacle_directions
+
+def adjust_direction(obstacle_directions):
+    if not obstacle_directions:
+        return False  
+    else:
+        Stop()  # stop the car
+        if 90 in obstacle_directions:  # obstacle ahead
+            Backward()
+            time.sleep(1)
+            TurnLeft()
+            time.sleep(1)
+        elif 0 in obstacle_directions:  
+            TurnRight()
+            time.sleep(1)
+        elif 180 in obstacle_directions:  
+            TurnLeft()
+            time.sleep(1)
+        return True
+
+current_scan_angle_index = 0 
+
+while True:
+    # Line-following logic
+    left = infrared.read_one_infrared(1)
+    center = infrared.read_one_infrared(2)
+    right = infrared.read_one_infrared(3)
+    print(f"[({left}) ({center}) ({right})]")
+
+    Forward()  # default behavior is to move forward
+
+    if left == 1 and center == 0 and right == 1: 
+        Forward()# continue forward
+        pass
+
+    elif left == 1 and center == 1 and right == 0:
+        TurnLeft()
+
+    elif left == 0 and center == 1 and right == 1:
+        TurnRight()
+
+    elif left == 1 and center == 0 and right == 0:  # slight right turn
+        bigLeft()
+
+    elif left == 0 and center == 0 and right == 1:  # slight left turn
+        bigRight()
+
+    elif left == 0 and center == 0 and right == 0:  # all lights off
+        Stop()
+
+    elif left == 1 and center == 1 and right == 1:  # all lights on
+        Backward()
+        time.sleep(0.5)
+        Stop()
+
+    current_angle = scan_angles[current_scan_angle_index]
+    servo.set_servo_pwm("0", current_angle)
+    dist = dist_sensor.get_distance()
+    print(f"Angle {current_angle}: Distance {dist} cm")
+    
+    if dist <= obstacle_away:
+        adjust_direction([current_angle])
+        continue  
+
+   
+    current_scan_angle_index = (current_scan_angle_index + 1) % len(scan_angles)
+
+    time.sleep(0.1)
